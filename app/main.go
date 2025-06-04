@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -36,6 +37,12 @@ func connHandler(conn net.Conn) {
 			if url == "/" {
 				conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 				return
+			} else if strings.HasPrefix(url, "/echo/") {
+				content := strings.TrimPrefix(url, "/echo/")
+				contentLength := strconv.Itoa(len(content))
+				response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
+				conn.Write([]byte(response))
+				return
 			}
 		}
 	}
@@ -59,6 +66,6 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(conn)
-	
+
 	connHandler(conn)
 }
