@@ -12,10 +12,9 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
+var baseDir string
 
-var baseDir string 
-
-func connHandler(conn net.Conn) {
+func connHandler(conn net.Conn, directory string) {
 	defer conn.Close()
 
 	buffer := make([]byte, 1024)
@@ -89,14 +88,18 @@ func connHandler(conn net.Conn) {
 }
 
 func main() {
+	// default directory path
+	directory := ""
+
+	// Parse CLI args
 	for i, arg := range os.Args {
 		if arg == "--directory" && i+1 < len(os.Args) {
-			baseDir = os.Args[i+1]
+			directory = os.Args[i+1]
 			break
 		}
 	}
 
-	if baseDir == "" {
+	if directory == "" {
 		log.Fatal("Missing --directory argument")
 	}
 
@@ -109,9 +112,11 @@ func main() {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
+			fmt.Println("Error accepting connection:", err.Error())
 			os.Exit(1)
 		}
-		go connHandler(conn)
+
+		// pass the directory to the handler
+		go connHandler(conn, directory)
 	}
 }
