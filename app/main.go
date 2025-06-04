@@ -9,8 +9,7 @@ import (
 	"strings"
 )
 
-var _ = net.Listen
-var _ = os.Exit
+var baseDir string // Global variable to store the directory passed via --directory
 
 func connHandler(conn net.Conn) {
 	defer conn.Close()
@@ -26,57 +25,76 @@ func connHandler(conn net.Conn) {
 	fmt.Println("Full Request:\n", request)
 
 	lines := strings.Split(request, "\r\n")
-	if len(lines) > 0 {
-		requestLine := lines[0]
-		var userAgentContent string
-		for i := 1; i < len(lines); i++ {
-			if strings.Contains(lines[i], "User-Agent:") {
-				userAgentLine := strings.Split(lines[i], ": ")
+	if len(lines) == 0 {
+		return
+	}
+
+	requestLine := lines[0]
+	var userAgentContent string
+	for i := 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "User-Agent:") {
+			userAgentLine := strings.SplitN(lines[i], ": ", 2)
+			if len(userAgentLine) == 2 {
 				userAgentContent = userAgentLine[1]
-				break
 			}
-		}
-
-		parts := strings.Split(requestLine, " ")
-		if len(parts) >= 2 {
-			method := parts[0]
-			url := parts[1]
-			fmt.Printf("Method: %s, URL: %s\n", method, url)
-
-			if url == "/" {
-				conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-				return
-			} else if strings.HasPrefix(url, "/echo/") {
-				content := strings.TrimPrefix(url, "/echo/")
-				contentLength := strconv.Itoa(len(content))
-				response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
-				conn.Write([]byte(response))
-				return
-			} else if url == "/user-agent" {
-				contentLength := strconv.Itoa(len(userAgentContent))
-				response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + userAgentContent
-				conn.Write([]byte(response))
-				return
-			} else if strings.HasPrefix(url, "/files/") {
-				fileName := strings.TrimPrefix(url, "/files/")	
-				filePath := fmt.Sprintf("%s/%s", "tmp", fileName)
-				fileContent, err := os.ReadFile(filePath)
-				if err != nil {
-					log.Println("error reading file:", err)
-				}
-				contentLength := strconv.Itoa(len(fileContent))
-				response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
-				conn.Write([]byte(response))
-				return
-			}
+			break
 		}
 	}
 
-	// Fallback response
-	conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	parts := strings.Split(requestLine, " ")
+	if len(parts) < 2 {
+		return
+	}
+
+	method := parts[0]
+	url := parts[1]
+
+	fmt.Printf("Method: %s, URL: %s\n", method, url)
+
+	switch {
+	case url == "/" && method == "GET":
+		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+
+	case strings.HasPrefix(url, "/echo/") && method == "GET":
+		content := strings.TrimPrefix(url, "/echo/")
+		contentLength := strconv.Itoa(len(content))
+		response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
+		conn.Write([]byte(response))
+
+	case url == "/user-agent" && method == "GET":
+		contentLength := strconv.Itoa(len(userAgentContent))
+		response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + userAgentContent
+		conn.Write([]byte(response))
+
+	case strings.HasPrefix(url, "/files/") && method == "GET":
+		fileName := strings.TrimPrefix(url, "/files/")
+		filePath := fmt.Sprintf("%s/%s", baseDir, fileName)
+		fileContent, err := os.ReadFile(filePath)
+		if err != nil {
+			conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+			log.Println("error reading file:", err)
+			return
+		}
+		contentLength := strconv.Itoa(len(fileContent))
+		response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
+		conn.Write([]byte(response))
+
+	default:
+		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	}
 }
 
 func main() {
+	for i, arg := range os.Args {
+		if arg == "--directory" && i+1 < len(os.Args) {
+			baseDir = os.Args[i+1]
+			break
+		}
+	}
+
+	if baseDir == "" {
+		log.Fatal("Missing --directory argument")
+	}
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
@@ -85,14 +103,11 @@ func main() {
 	}
 
 	for {
-		var conn net.Conn
-		conn, err = l.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		// fmt.Println(conn)
-	
 		go connHandler(conn)
 	}
 }
