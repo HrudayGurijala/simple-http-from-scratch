@@ -57,6 +57,17 @@ func connHandler(conn net.Conn) {
 				response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + userAgentContent
 				conn.Write([]byte(response))
 				return
+			} else if strings.HasPrefix(url, "/files/") {
+				fileName := strings.TrimPrefix(url, "/files/")	
+				filePath := fmt.Sprintf("%s/%s", "tmp", fileName)
+				fileContent, err := os.ReadFile(filePath)
+				if err != nil {
+					log.Println("error reading file:", err)
+				}
+				contentLength := strconv.Itoa(len(fileContent))
+				response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
+				conn.Write([]byte(response))
+				return
 			}
 		}
 	}
