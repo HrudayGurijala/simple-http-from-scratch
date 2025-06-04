@@ -82,6 +82,26 @@ func connHandler(conn net.Conn) {
 		contentLength := strconv.Itoa(len(fileContent))
 		response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
 		conn.Write([]byte(response))
+	
+	case strings.HasPrefix(url, "/files/") && method == "POST":
+		fileName := strings.TrimPrefix(url, "/files/")
+		filePath := fmt.Sprintf("%s/%s", baseDir, fileName)
+
+		body := strings.SplitN(request, "\r\n\r\n", 2)
+		if len(body) < 2 {
+			conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+			return
+		}
+		content := []byte(body[1])
+
+		err := os.WriteFile(filePath, content, 0644)
+		if err != nil {
+			conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+			log.Println("error writing file:", err)
+			return
+		}
+
+		conn.Write([]byte("HTTP/1.1 201 Created\r\n\r\n"))
 
 	default:
 		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
@@ -89,7 +109,7 @@ func connHandler(conn net.Conn) {
 }
 
 func main() {
-	// Parse CLI args
+
 	for i, arg := range os.Args {
 		if arg == "--directory" && i+1 < len(os.Args) {
 			baseDir = os.Args[i+1]
@@ -97,7 +117,6 @@ func main() {
 		}
 	}
 
-	// Don't exit if baseDir is empty; it's optional in some stages
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
