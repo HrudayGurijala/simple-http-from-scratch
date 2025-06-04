@@ -82,6 +82,6 @@ func main() {
 		}
 		// fmt.Println(conn)
 	
-		connHandler(conn)
+		go connHandler(conn)
 	}
 }
