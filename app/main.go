@@ -73,13 +73,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	var conn net.Conn
-	conn, err = l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	for {
+		var conn net.Conn
+		conn, err = l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		// fmt.Println(conn)
+	
+		connHandler(conn)
 	}
-	fmt.Println(conn)
-
-	connHandler(conn)
 }
