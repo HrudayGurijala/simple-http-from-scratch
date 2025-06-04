@@ -92,16 +92,13 @@ func main() {
 	// Parse CLI args
 	for i, arg := range os.Args {
 		if arg == "--directory" && i+1 < len(os.Args) {
-			baseDir = os.Args[i+1] // set the global variable here
+			baseDir = os.Args[i+1]
 			break
 		}
 	}
 
-	if baseDir == "" {
-		log.Fatal("Missing --directory argument")
-	}
+	// Don't exit if baseDir is empty; it's optional in some stages
 
-	// Start TCP server
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
