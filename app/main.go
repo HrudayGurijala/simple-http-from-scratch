@@ -89,21 +89,19 @@ func connHandler(conn net.Conn) {
 }
 
 func main() {
-	// default directory path
-	directory := ""
-
 	// Parse CLI args
 	for i, arg := range os.Args {
 		if arg == "--directory" && i+1 < len(os.Args) {
-			directory = os.Args[i+1]
+			baseDir = os.Args[i+1] // set the global variable here
 			break
 		}
 	}
 
-	if directory == "" {
+	if baseDir == "" {
 		log.Fatal("Missing --directory argument")
 	}
 
+	// Start TCP server
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
@@ -117,8 +115,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// pass the directory to the handler
 		go connHandler(conn)
 	}
 }
-
