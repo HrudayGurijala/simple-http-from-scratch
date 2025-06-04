@@ -12,9 +12,10 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
-var baseDir string
 
-func connHandler(conn net.Conn, directory string) {
+var baseDir string 
+
+func connHandler(conn net.Conn) {
 	defer conn.Close()
 
 	buffer := make([]byte, 1024)
@@ -117,6 +118,7 @@ func main() {
 		}
 
 		// pass the directory to the handler
-		go connHandler(conn, directory)
+		go connHandler(conn)
 	}
 }
+
