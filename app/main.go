@@ -56,11 +56,17 @@ func connHandler(conn net.Conn) {
 		method := parts[0]
 		url := parts[1]
 
-		fmt.Printf("Method: %s, URL: %s\n", method, url)
+		shouldClose := connectionHeader == "close"
+		connectionHeaderResp := ""
+		if shouldClose {
+			connectionHeaderResp = "Connection: close\r\n"
+		} else {
+			connectionHeaderResp = "Connection: keep-alive\r\n"
+		}
 
 		switch {
 		case url == "/" && method == "GET":
-			conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			conn.Write([]byte("HTTP/1.1 200 OK\r\n" + connectionHeaderResp + "\r\n"))
 
 		case strings.HasPrefix(url, "/echo/") && method == "GET":
 			content := strings.TrimPrefix(url, "/echo/")
@@ -73,19 +79,22 @@ func connHandler(conn net.Conn) {
 					gz.Close()
 					compressed := buf.Bytes()
 					contentLength := strconv.Itoa(len(compressed))
-					response := "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n"
+					response := "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n" + connectionHeaderResp + "\r\n"
 					conn.Write([]byte(response))
 					conn.Write(compressed)
-					goto checkClose
+					if shouldClose {
+						return
+					}
+					goto continueLoop
 				}
 			}
 			contentLength := strconv.Itoa(len(content))
-			response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
+			response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n" + connectionHeaderResp + "\r\n" + content
 			conn.Write([]byte(response))
 
 		case url == "/user-agent" && method == "GET":
 			contentLength := strconv.Itoa(len(userAgentContent))
-			response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + userAgentContent
+			response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n" + connectionHeaderResp + "\r\n" + userAgentContent
 			conn.Write([]byte(response))
 
 		case strings.HasPrefix(url, "/files/") && method == "GET":
@@ -93,12 +102,14 @@ func connHandler(conn net.Conn) {
 			filePath := fmt.Sprintf("%s/%s", baseDir, fileName)
 			fileContent, err := os.ReadFile(filePath)
 			if err != nil {
-				conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
-				log.Println("error reading file:", err)
-				goto checkClose
+				conn.Write([]byte("HTTP/1.1 404 Not Found\r\n" + connectionHeaderResp + "\r\n"))
+				if shouldClose {
+					return
+				}
+				goto continueLoop
 			}
 			contentLength := strconv.Itoa(len(fileContent))
-			response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
+			response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n" + connectionHeaderResp + "\r\n" + string(fileContent)
 			conn.Write([]byte(response))
 
 		case strings.HasPrefix(url, "/files/") && method == "POST":
@@ -106,26 +117,32 @@ func connHandler(conn net.Conn) {
 			filePath := fmt.Sprintf("%s/%s", baseDir, fileName)
 			body := strings.SplitN(request, "\r\n\r\n", 2)
 			if len(body) < 2 {
-				conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
-				goto checkClose
+				conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n" + connectionHeaderResp + "\r\n"))
+				if shouldClose {
+					return
+				}
+				goto continueLoop
 			}
 			content := []byte(body[1])
 			err := os.WriteFile(filePath, content, 0644)
 			if err != nil {
-				conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
-				log.Println("error writing file:", err)
-				goto checkClose
+				conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n" + connectionHeaderResp + "\r\n"))
+				if shouldClose {
+					return
+				}
+				goto continueLoop
 			}
-			conn.Write([]byte("HTTP/1.1 201 Created\r\n\r\n"))
+			conn.Write([]byte("HTTP/1.1 201 Created\r\n" + connectionHeaderResp + "\r\n"))
 
 		default:
-			conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+			conn.Write([]byte("HTTP/1.1 404 Not Found\r\n" + connectionHeaderResp + "\r\n"))
 		}
 
-	checkClose:
-		if connectionHeader == "close" {
-			break
+		if shouldClose {
+			return
 		}
+
+	continueLoop:
 	}
 }
 
