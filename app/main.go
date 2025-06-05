@@ -74,18 +74,23 @@ func connHandler(conn net.Conn) {
 		content := strings.TrimPrefix(url, "/echo/")
 		contentLength := strconv.Itoa(len(content))
 		var response string
-		if encodingScheme == "gzip" {
-			var buf bytes.Buffer
-			gz := gzip.NewWriter(&buf)
-			gz.Write([]byte(content))
-			gz.Close()
-			compressed := buf.Bytes()
+		hasGzip := strings.Split(encodingScheme,", ")
 
-			contentLength := strconv.Itoa(len(compressed))
-			response := "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n"
-			conn.Write([]byte(response))
-			conn.Write(compressed)
-			return
+		for _,scheme := range hasGzip {
+			
+			if scheme == "gzip" {
+				var buf bytes.Buffer
+				gz := gzip.NewWriter(&buf)
+				gz.Write([]byte(content))
+				gz.Close()
+				compressed := buf.Bytes()
+	
+				contentLength := strconv.Itoa(len(compressed))
+				response := "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n"
+				conn.Write([]byte(response))
+				conn.Write(compressed)
+				return
+			}
 		}
 
 		response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
