@@ -1,19 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"compress/gzip"
 )
 
 var _ = net.Listen
 var _ = os.Exit
 
-
-var baseDir string 
+var baseDir string
 
 func connHandler(conn net.Conn) {
 	defer conn.Close()
@@ -35,11 +36,21 @@ func connHandler(conn net.Conn) {
 
 	requestLine := lines[0]
 	var userAgentContent string
+	var encodingScheme string
 	for i := 1; i < len(lines); i++ {
 		if strings.HasPrefix(lines[i], "User-Agent:") {
 			userAgentLine := strings.SplitN(lines[i], ": ", 2)
 			if len(userAgentLine) == 2 {
 				userAgentContent = userAgentLine[1]
+			}
+			break
+		}
+	}
+	for i := 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "Accept-Encoding:") {
+			encodingSchemeLine := strings.SplitN(lines[i], ": ", 2)
+			if len(encodingSchemeLine) == 2 {
+				encodingScheme = encodingSchemeLine[1]
 			}
 			break
 		}
@@ -62,7 +73,22 @@ func connHandler(conn net.Conn) {
 	case strings.HasPrefix(url, "/echo/") && method == "GET":
 		content := strings.TrimPrefix(url, "/echo/")
 		contentLength := strconv.Itoa(len(content))
-		response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
+		var response string
+		if encodingScheme == "gzip" {
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			gz.Write([]byte(content))
+			gz.Close()
+			compressed := buf.Bytes()
+
+			contentLength := strconv.Itoa(len(compressed))
+			response := "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n"
+			conn.Write([]byte(response))
+			conn.Write(compressed)
+			return
+		}
+
+		response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + contentLength + "\r\n\r\n" + content
 		conn.Write([]byte(response))
 
 	case url == "/user-agent" && method == "GET":
@@ -82,7 +108,7 @@ func connHandler(conn net.Conn) {
 		contentLength := strconv.Itoa(len(fileContent))
 		response := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + contentLength + "\r\n\r\n" + string(fileContent)
 		conn.Write([]byte(response))
-	
+
 	case strings.HasPrefix(url, "/files/") && method == "POST":
 		fileName := strings.TrimPrefix(url, "/files/")
 		filePath := fmt.Sprintf("%s/%s", baseDir, fileName)
@@ -116,7 +142,6 @@ func main() {
 			break
 		}
 	}
-
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
